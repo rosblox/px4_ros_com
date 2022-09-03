@@ -37,8 +37,8 @@ set(USES_DEPRECATED_EXPORT_API "ardent" "bouncy" "crystal" "dashing" "eloquent")
 
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
-find_package(fastcdr REQUIRED)
-find_package(fastrtps REQUIRED)
+# find_package(fastcdr REQUIRED)
+# find_package(fastrtps REQUIRED)
 find_package(rclcpp REQUIRED)
 get_default_rmw_implementation(rmw_implementation)
 find_package("${rmw_implementation}" REQUIRED)
@@ -57,9 +57,9 @@ find_package(Eigen3 REQUIRED NO_MODULE)
 # Generate micro-RTPS agent code ##
 ###################################
 
-get_filename_component(PX4_MSGS_DIR "../" ABSOLUTE BASE_DIR ${px4_msgs_DIR})
-set(MSGS_DIR "${PX4_MSGS_DIR}/msg" CACHE INTERNAL "MSGS_DIR")
-include(GenerateMicroRTPSAgent)
+# get_filename_component(PX4_MSGS_DIR "../" ABSOLUTE BASE_DIR ${px4_msgs_DIR})
+# set(MSGS_DIR "${PX4_MSGS_DIR}/msg" CACHE INTERNAL "MSGS_DIR")
+# include(GenerateMicroRTPSAgent)
 
 #################
 # Setup targets #
@@ -78,19 +78,19 @@ function(custom_executable subfolder target)
 endfunction()
 
 # Add frame_transforms lib
-add_library(frame_transforms SHARED src/lib/frame_transforms.cpp)
-ament_target_dependencies(frame_transforms Eigen3 geometry_msgs sensor_msgs)
-target_include_directories(frame_transforms PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
-  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-  ${Eigen3_INCLUDE_DIRS}
-)
-target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} ${sensor_msgs_LIBRARIES})
+# add_library(frame_transforms SHARED src/lib/frame_transforms.cpp)
+# ament_target_dependencies(frame_transforms Eigen3 geometry_msgs sensor_msgs)
+# target_include_directories(frame_transforms PUBLIC
+#   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
+#   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+#   ${Eigen3_INCLUDE_DIRS}
+# )
+# target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} ${sensor_msgs_LIBRARIES})
 
 # Add microRTPS agent
-add_executable(micrortps_agent ${MICRORTPS_AGENT_FILES})
-ament_target_dependencies(micrortps_agent fastcdr fastrtps rclcpp)
-target_link_libraries(micrortps_agent fastcdr fastrtps ${rclcpp_LIBRARIES})
+# add_executable(micrortps_agent ${MICRORTPS_AGENT_FILES})
+# ament_target_dependencies(micrortps_agent fastcdr fastrtps rclcpp)
+# target_link_libraries(micrortps_agent fastcdr fastrtps ${rclcpp_LIBRARIES})
 
 # Add examples
 custom_executable(examples/listeners sensor_combined_listener)
