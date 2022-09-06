@@ -187,9 +187,12 @@ void OffboardControl::publish_attitude_setpoint() const {
 	float thrust_x = abs(offboard_setpoint_counter_ % 1000 - 500.0)/5000.0;
 	RCLCPP_INFO(this->get_logger(), "%f\n", thrust_x);
 	msg.timestamp = timestamp_.load();
+
+	thrust_x = thrust_x <= 0.035 ? 0.035 : thrust_x;
+
 	msg.thrust_body = {thrust_x, 0.0, 0.0};
 	// msg.yaw_sp_move_rate = 0.0;
-	msg.yaw_body = thrust_x;
+	// msg.yaw_body = thrust_x;
 	vehicle_attitude_setpoint_publisher_->publish(msg);
 }
 
