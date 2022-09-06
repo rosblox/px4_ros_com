@@ -38,7 +38,7 @@ public:
 		timesync_sub_ =
 			this->create_subscription<px4_msgs::msg::Timesync>("fmu/out/Timesync", 10,
 				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
-					timestamp_.store(msg->timestamp);
+					this->timestamp_.store(msg->timestamp);
 				});
 
 		publish_setpoint_and_arm();
@@ -52,7 +52,7 @@ public:
 		};
 
 
-		timer_ = this->create_wall_timer(10ms, timer_callback);
+		timer_ = this->create_wall_timer(5ms, timer_callback);
 	}
 
 	void arm() const;
@@ -87,7 +87,7 @@ void OffboardControl::publish_actuator_motors() const {
 	thrust_x = thrust_x <= 0.035 ? 0.035 : thrust_x;
 
 	msg.timestamp = timestamp_.load();
-	msg.control = {thrust_x, 2*thrust_x, 0,0,0,0,0,0,0,0,0,0};
+	msg.control = {thrust_x, thrust_x, 0,0,0,0,0,0,0,0,0,0};
 
 
 	actuator_motors_publisher_->publish(msg);
@@ -98,9 +98,9 @@ void OffboardControl::publish_setpoint_and_arm() const {
 
 	for (int i = 0; i < 10; i++) {
 		publish_offboard_control_mode();
-    	std::this_thread::sleep_for(20ms);
+    	std::this_thread::sleep_for(30ms);
 		actuator_motors_publisher_->publish(ActuatorMotors());
-    	std::this_thread::sleep_for(20ms);
+    	std::this_thread::sleep_for(30ms);
 	}
 	
 	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
