@@ -19,6 +19,14 @@ class OffboardControl : public rclcpp::Node {
 public:
 	OffboardControl() : Node("offboard_control") {
 
+		using rclcpp::contexts::get_global_default_context;
+		get_global_default_context()->add_pre_shutdown_callback(
+		[this]() {
+			this->timer_->cancel();
+			std::this_thread::sleep_for(50ms);
+			this->disarm();
+		});
+
 		offboard_control_mode_publisher_ =
 			this->create_publisher<OffboardControlMode>("fmu/in/OffboardControlMode", 10);
 		actuator_motors_publisher_ =
@@ -33,29 +41,23 @@ public:
 					timestamp_.store(msg->timestamp);
 				});
 
+		publish_setpoint_and_arm();
+
 		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
-
-			if (offboard_setpoint_counter_ == 10) {
-				// Change to Offboard mode after 10 setpoints
-				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
-
-				// Arm the vehicle
-				this->arm();
-			}
-
-            // offboard_control_mode needs to be paired with trajectory_setpoint
-			publish_offboard_control_mode();
+			// publish_offboard_control_mode();
 			publish_actuator_motors();
-			
-			offboard_setpoint_counter_++;
+			offboard_setpoint_counter_ ++;
 		};
+
+
 		timer_ = this->create_wall_timer(10ms, timer_callback);
 	}
 
 	void arm() const;
 	void disarm() const;
+	void publish_setpoint_and_arm() const;
 
 private:
 	rclcpp::TimerBase::SharedPtr timer_;
@@ -85,13 +87,28 @@ void OffboardControl::publish_actuator_motors() const {
 	thrust_x = thrust_x <= 0.035 ? 0.035 : thrust_x;
 
 	msg.timestamp = timestamp_.load();
-	msg.control = {thrust_x, thrust_x, 0,0,0,0,0,0,0,0,0,0};
+	msg.control = {thrust_x, 2*thrust_x, 0,0,0,0,0,0,0,0,0,0};
 
 
 	actuator_motors_publisher_->publish(msg);
 }
 
 
+void OffboardControl::publish_setpoint_and_arm() const {
+
+	for (int i = 0; i < 10; i++) {
+		publish_offboard_control_mode();
+    	std::this_thread::sleep_for(20ms);
+		actuator_motors_publisher_->publish(ActuatorMotors());
+    	std::this_thread::sleep_for(20ms);
+	}
+	
+	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
+    std::this_thread::sleep_for(50ms);
+
+	arm();
+    std::this_thread::sleep_for(50ms);
+}
 
 
 void OffboardControl::arm() const {
