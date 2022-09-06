@@ -70,8 +70,8 @@ public:
 		// this->create_publisher<TrajectorySetpoint>("fmu/in/TrajectorySetpoint", 10);
 		vehicle_attitude_setpoint_publisher_ = 
 			this->create_publisher<VehicleAttitudeSetpoint>("fmu/in/VehicleAttitudeSetpoint", 10);		
-		// actuator_motors_publisher_ =
-		// 	this->create_publisher<ActuatorMotors>("fmu/in/ActuatorMotors", 10);
+		actuator_motors_publisher_ =
+			this->create_publisher<ActuatorMotors>("fmu/in/ActuatorMotors", 10);
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/in/VehicleCommand", 10);
 
@@ -99,7 +99,7 @@ public:
 			publish_offboard_control_mode();
 			// publish_trajectory_setpoint();
 			publish_attitude_setpoint();
-			// publish_actuator_motors();
+			publish_actuator_motors();
 			
 
 			offboard_setpoint_counter_++;
@@ -116,7 +116,7 @@ private:
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
 	// rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
 	rclcpp::Publisher<VehicleAttitudeSetpoint>::SharedPtr vehicle_attitude_setpoint_publisher_;
-	// rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
+	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
 
@@ -127,7 +127,7 @@ private:
 	void publish_offboard_control_mode() const;
 	// void publish_trajectory_setpoint() const;
 	void publish_attitude_setpoint() const;
-	// void publish_actuator_motors() const;
+	void publish_actuator_motors() const;
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0,
 				     float param2 = 0.0) const;
 };
@@ -160,9 +160,9 @@ void OffboardControl::publish_offboard_control_mode() const {
 	msg.position = false;
 	msg.velocity = false;
 	msg.acceleration = false;
-	msg.attitude = true;
+	msg.attitude = false;
 	msg.body_rate = false;
-	msg.actuator = false;
+	msg.actuator = true;
 
 	offboard_control_mode_publisher_->publish(msg);
 }
@@ -193,21 +193,22 @@ void OffboardControl::publish_attitude_setpoint() const {
 	msg.thrust_body = {thrust_x, 0.0, 0.0};
 	// msg.yaw_sp_move_rate = 0.0;
 	// msg.yaw_body = thrust_x;
-	vehicle_attitude_setpoint_publisher_->publish(msg);
+	// vehicle_attitude_setpoint_publisher_->publish(msg);
 }
 
-// void OffboardControl::publish_actuator_motors() const {
-// 	ActuatorMotors msg{};
+void OffboardControl::publish_actuator_motors() const {
+	ActuatorMotors msg{};
 
-// 	float thrust_x = abs(offboard_setpoint_counter_ % 100 - 50.0)/500.0;
-// 	RCLCPP_INFO(this->get_logger(), "%f\n", thrust_x);
+	float thrust_x = abs(offboard_setpoint_counter_ % 100 - 50.0)/500.0;
+	RCLCPP_INFO(this->get_logger(), "%f\n", thrust_x);
+	thrust_x = thrust_x <= 0.035 ? 0.035 : thrust_x;
 
-// 	msg.timestamp = timestamp_.load();
-// 	msg.control = {thrust_x, thrust_x, 0,0,0,0,0,0,0,0,0,0};
+	msg.timestamp = timestamp_.load();
+	msg.control = {thrust_x, thrust_x, 0,0,0,0,0,0,0,0,0,0};
 
 
-// 	actuator_motors_publisher_->publish(msg);
-// }
+	actuator_motors_publisher_->publish(msg);
+}
 
 
 /**
