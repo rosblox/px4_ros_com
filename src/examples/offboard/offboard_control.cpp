@@ -98,13 +98,13 @@ public:
             		// offboard_control_mode needs to be paired with trajectory_setpoint
 			publish_offboard_control_mode();
 			// publish_trajectory_setpoint();
-			publish_attitude_setpoint();
+			// publish_attitude_setpoint();
 			publish_actuator_motors();
 			
 
 			offboard_setpoint_counter_++;
 		};
-		timer_ = this->create_wall_timer(10ms, timer_callback);
+		timer_ = this->create_wall_timer(100ms, timer_callback);
 	}
 
 	void arm() const;
@@ -196,6 +196,14 @@ void OffboardControl::publish_attitude_setpoint() const {
 	// vehicle_attitude_setpoint_publisher_->publish(msg);
 }
 
+
+
+
+
+
+
+
+
 void OffboardControl::publish_actuator_motors() const {
 	ActuatorMotors msg{};
 
@@ -209,6 +217,11 @@ void OffboardControl::publish_actuator_motors() const {
 
 	actuator_motors_publisher_->publish(msg);
 }
+
+
+
+
+
 
 
 /**
@@ -237,7 +250,10 @@ int main(int argc, char* argv[]) {
 	std::cout << "Starting offboard control node..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<OffboardControl>());
+
+	std::shared_ptr offboard_control = std::make_shared<OffboardControl>();
+
+	rclcpp::spin(offboard_control);
 
 	rclcpp::shutdown();
 	return 0;
