@@ -1,8 +1,9 @@
 #include <px4_msgs/msg/offboard_control_mode.hpp>
-#include <px4_msgs/msg/trajectory_setpoint.hpp>
-#include <px4_msgs/msg/vehicle_attitude_setpoint.hpp>
+// #include <px4_msgs/msg/trajectory_setpoint.hpp>
+// #include <px4_msgs/msg/vehicle_attitude_setpoint.hpp>
 #include <px4_msgs/msg/actuator_motors.hpp>
-#include <px4_msgs/msg/timesync.hpp>
+// #include <px4_msgs/msg/timesync.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -34,11 +35,11 @@ public:
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/in/VehicleCommand", 10);
 
-		// get common timestamp
-		timesync_sub_ =
-			this->create_subscription<px4_msgs::msg::Timesync>("fmu/out/Timesync", 10,
-				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
-					this->timestamp_.store(msg->timestamp);
+		vehicle_odometry_sub_ =
+			this->create_subscription<px4_msgs::msg::VehicleOdometry>("fmu/out/VehicleOdometry", 10,
+				[this](const px4_msgs::msg::VehicleOdometry::UniquePtr msg) {
+					this->vehicle_odometry_ = msg->q;
+					RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
 				});
 
 		publish_setpoint_and_arm();
@@ -65,9 +66,10 @@ private:
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
 	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
-	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
+	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
 
-	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
+	// std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
+	std::array<float, 4> vehicle_odometry_;
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
@@ -83,12 +85,11 @@ void OffboardControl::publish_actuator_motors() const {
 	ActuatorMotors msg{};
 
 	float thrust_x = abs(offboard_setpoint_counter_ % 100 - 50.0)/500.0;
-	RCLCPP_INFO(this->get_logger(), "%f\n", thrust_x);
 	thrust_x = thrust_x <= 0.035 ? 0.035 : thrust_x;
 
-	msg.timestamp = timestamp_.load();
+	// msg.timestamp = timestamp_.load();
+	thrust_x = 0.1;
 	msg.control = {thrust_x, thrust_x, 0,0,0,0,0,0,0,0,0,0};
-
 
 	actuator_motors_publisher_->publish(msg);
 }
@@ -125,7 +126,7 @@ void OffboardControl::disarm() const {
 
 void OffboardControl::publish_offboard_control_mode() const {
 	OffboardControlMode msg{};
-	msg.timestamp = timestamp_.load();
+	// msg.timestamp = timestamp_.load();
 	msg.position = false;
 	msg.velocity = false;
 	msg.acceleration = false;
@@ -144,7 +145,7 @@ void OffboardControl::publish_offboard_control_mode() const {
  */
 void OffboardControl::publish_vehicle_command(uint16_t command, float param1, float param2) const {
 	VehicleCommand msg{};
-	msg.timestamp = timestamp_.load();
+	// msg.timestamp = timestamp_.load();
 	msg.param1 = param1;
 	msg.param2 = param2;
 	msg.command = command;
