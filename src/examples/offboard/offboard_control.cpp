@@ -6,11 +6,14 @@
 #include <px4_msgs/msg/vehicle_odometry.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
+#include <std_msgs/msg/float32.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
 #include <px4_ros_com/frame_transforms.h>
+#include <control_toolbox/pid_ros.hpp>
 
+// control_toolbox::Pid
 
 #include <chrono>
 #include <iostream>
@@ -45,9 +48,16 @@ public:
 					RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
 				});
 
+		setpoint_sub_ =
+			this->create_subscription<std_msgs::msg::Float32>("vortex/setpoint", 10,
+				[this](const std_msgs::msg::Float32::UniquePtr msg) {
+					this->setpoint_ = msg->data;
+				});
+
 		publish_setpoint_and_arm();
 
 		offboard_setpoint_counter_ = 0;
+		setpoint_ = 0;
 
 		auto timer_callback = [this]() -> void {
 			// publish_offboard_control_mode();
@@ -70,9 +80,10 @@ private:
 	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
+	rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr setpoint_sub_;
 
-	// std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 	std::array<float, 4> vehicle_odometry_;
+	double setpoint_;
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
@@ -87,19 +98,56 @@ private:
 void OffboardControl::publish_actuator_motors() const {
 
 	Eigen::Quaterniond q(vehicle_odometry_[0], vehicle_odometry_[1], vehicle_odometry_[2], vehicle_odometry_[3]);
-	double roll;
-	double pitch;
-	double yaw;
-	px4_ros_com::frame_transforms::utils::quaternion::quaternion_to_euler(q, roll, pitch, yaw);
+	double roll_measured;
+	double pitch_measured;
+	double yaw_measured;
+	px4_ros_com::frame_transforms::utils::quaternion::quaternion_to_euler(q, roll_measured, pitch_measured, yaw_measured);
+
+	auto error = setpoint_ - yaw_measured;
+
+	// account for wrap-around at 180 deg
+	if(error > 180.0){
+		error-=360;
+	} else if (error < -180.0){
+		error+=360.0;
+	}
+
+	double p_gain = 0.1;
+
+	double yaw_thrust = p_gain * error;
+	double yaw_thrust_left = yaw_thrust/2.0;
+	double yaw_thrust_right = -yaw_thrust/2.0;
+
+	const double yaw_thrust_limit_low = 0.0;
+	const double yaw_thrust_limit_high = 0.05;
+
+	std::clamp(yaw_thrust_left, yaw_thrust_limit_low, yaw_thrust_limit_high);
+	std::clamp(yaw_thrust_right, yaw_thrust_limit_low, yaw_thrust_limit_high);
+
+
+	double theta_thrust = 0.1;
+
+	double thrust_left = theta_thrust + yaw_thrust_left;
+	double thrust_right = theta_thrust + yaw_thrust_right;
+
+	// //maybe this is not needed
+	// if(thrust_left < 0.0){
+	// 	thrust_right += std::fabs(thrust_left);
+	// }
+	// if(thrust_right < 0.0){
+	// 	thrust_left += std::fabs(thrust_right);
+	// }
+
+
+	const double thrust_limit_low = 0.0;
+	const double thrust_limit_high = 0.1;
+	std::clamp(thrust_left, thrust_limit_low, thrust_limit_high);
+	std::clamp(thrust_right, thrust_limit_low, thrust_limit_high);
+
 
 	ActuatorMotors msg{};
 
-	float thrust_x = abs(offboard_setpoint_counter_ % 100 - 50.0)/500.0;
-	thrust_x = thrust_x <= 0.035 ? 0.035 : thrust_x;
-
-	// msg.timestamp = timestamp_.load();
-	thrust_x = 0.1;
-	msg.control = {thrust_x, thrust_x, 0,0,0,0,0,0,0,0,0,0};
+	msg.control = {(float) yaw_thrust_left, (float) yaw_thrust_right};
 
 	actuator_motors_publisher_->publish(msg);
 }
