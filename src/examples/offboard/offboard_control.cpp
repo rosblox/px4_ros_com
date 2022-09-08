@@ -9,6 +9,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
+#include <px4_ros_com/frame_transforms.h>
+
+
 #include <chrono>
 #include <iostream>
 
@@ -82,6 +85,13 @@ private:
 
 
 void OffboardControl::publish_actuator_motors() const {
+
+	Eigen::Quaterniond q(vehicle_odometry_[0], vehicle_odometry_[1], vehicle_odometry_[2], vehicle_odometry_[3]);
+	double roll;
+	double pitch;
+	double yaw;
+	px4_ros_com::frame_transforms::utils::quaternion::quaternion_to_euler(q, roll, pitch, yaw);
+
 	ActuatorMotors msg{};
 
 	float thrust_x = abs(offboard_setpoint_counter_ % 100 - 50.0)/500.0;
