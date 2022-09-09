@@ -14,7 +14,7 @@
 #include <control_toolbox/pid_ros.hpp>
 
 // control_toolbox::Pid
-
+#include <math.h>
 #include <chrono>
 #include <iostream>
 
@@ -44,8 +44,8 @@ public:
 		vehicle_odometry_sub_ =
 			this->create_subscription<px4_msgs::msg::VehicleOdometry>("fmu/out/VehicleOdometry", 10,
 				[this](const px4_msgs::msg::VehicleOdometry::UniquePtr msg) {
-					this->vehicle_odometry_ = msg->q;
-					RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
+					this->vehicle_orientation_ = msg->q;
+					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
 				});
 
 		setpoint_sub_ =
@@ -82,7 +82,7 @@ private:
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
 	rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr setpoint_sub_;
 
-	std::array<float, 4> vehicle_odometry_;
+	std::array<float, 4> vehicle_orientation_;
 	double setpoint_;
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
@@ -94,22 +94,38 @@ private:
 
 
 
+static constexpr float sq(float var) { return var * var; }
+const double PI = std::atan(1.0)*4;
+
+//Doesn't work: px4_ros_com::frame_transforms::utils::quaternion::quaternion_to_euler(q, roll_measured, pitch_measured, yaw_measured);
+double quaternion_get_yaw(std::array<float,4> q){
+	const float a = 2.f * (q[0] * q[3] + q[1] * q[2]);
+	const float b = sq(q[0]) + sq(q[1]) - sq(q[2]) - sq(q[3]);
+	return atan2f(a, b);
+}
 
 void OffboardControl::publish_actuator_motors() const {
 
-	Eigen::Quaterniond q(vehicle_odometry_[0], vehicle_odometry_[1], vehicle_odometry_[2], vehicle_odometry_[3]);
-	double roll_measured;
-	double pitch_measured;
 	double yaw_measured;
-	px4_ros_com::frame_transforms::utils::quaternion::quaternion_to_euler(q, roll_measured, pitch_measured, yaw_measured);
+	yaw_measured = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
+
+	RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured);
+
+	// RCLCPP_INFO(this->get_logger(), "quaternion measured: %f %f %f %f", q.w(), q.x(), q.y(), q.z()  );
+	// RCLCPP_INFO(this->get_logger(), "roll/pitch/yaw measured: %f %f %f", roll_measured, pitch_measured, yaw_measured);
 
 	auto error = setpoint_ - yaw_measured;
 
+	// RCLCPP_INFO(this->get_logger(), "error: %f", error);
+
+
+
+
 	// account for wrap-around at 180 deg
-	if(error > 180.0){
-		error-=360;
-	} else if (error < -180.0){
-		error+=360.0;
+	if(error > PI/2.0){
+		error-=PI;
+	} else if (error < -PI/2.0){
+		error+=PI;
 	}
 
 	double p_gain = 0.1;
