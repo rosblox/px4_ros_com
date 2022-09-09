@@ -58,13 +58,11 @@ public:
 
 		publish_setpoint_and_arm();
 
-		offboard_setpoint_counter_ = 0;
 		setpoint_rad_ = -PI/2;
 
 		auto timer_callback = [this]() -> void {
 			// publish_offboard_control_mode();
 			publish_actuator_motors();
-			offboard_setpoint_counter_ ++;
 		};
 
 
@@ -86,8 +84,6 @@ private:
 
 	std::array<float, 4> vehicle_orientation_;
 	double setpoint_rad_;
-
-	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
 	void publish_offboard_control_mode() const;
 	void publish_actuator_motors() const;
