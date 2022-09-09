@@ -18,6 +18,8 @@
 #include <chrono>
 #include <iostream>
 
+const double PI = std::atan(1.0)*4;
+
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
@@ -51,13 +53,13 @@ public:
 		setpoint_sub_ =
 			this->create_subscription<std_msgs::msg::Float32>("vortex/setpoint", 10,
 				[this](const std_msgs::msg::Float32::UniquePtr msg) {
-					this->setpoint_ = msg->data;
+					this->setpoint_rad_ = msg->data;
 				});
 
 		publish_setpoint_and_arm();
 
 		offboard_setpoint_counter_ = 0;
-		setpoint_ = 0;
+		setpoint_rad_ = -PI/2;
 
 		auto timer_callback = [this]() -> void {
 			// publish_offboard_control_mode();
@@ -83,7 +85,7 @@ private:
 	rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr setpoint_sub_;
 
 	std::array<float, 4> vehicle_orientation_;
-	double setpoint_;
+	double setpoint_rad_;
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
@@ -95,7 +97,6 @@ private:
 
 
 static constexpr float sq(float var) { return var * var; }
-const double PI = std::atan(1.0)*4;
 
 //Doesn't work: px4_ros_com::frame_transforms::utils::quaternion::quaternion_to_euler(q, roll_measured, pitch_measured, yaw_measured);
 double quaternion_get_yaw(std::array<float,4> q){
@@ -106,27 +107,26 @@ double quaternion_get_yaw(std::array<float,4> q){
 
 void OffboardControl::publish_actuator_motors() const {
 
-	double yaw_measured;
-	yaw_measured = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
-
-	RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured);
-
-	// RCLCPP_INFO(this->get_logger(), "quaternion measured: %f %f %f %f", q.w(), q.x(), q.y(), q.z()  );
-	// RCLCPP_INFO(this->get_logger(), "roll/pitch/yaw measured: %f %f %f", roll_measured, pitch_measured, yaw_measured);
-
-	auto error = setpoint_ - yaw_measured;
-
-	// RCLCPP_INFO(this->get_logger(), "error: %f", error);
+	double yaw_measured_deg;
+	yaw_measured_deg = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
+	// RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured_deg);
 
 
+	double yaw_measured_normalized = yaw_measured_deg / 180.0;
+	double setpoint_normalized = setpoint_rad_ / PI;
 
+	auto error = setpoint_normalized - yaw_measured_normalized;
+
+	RCLCPP_INFO(this->get_logger(), "error (normalized, deg): %f %f", error, error * 180.0);
 
 	// account for wrap-around at 180 deg
-	if(error > PI/2.0){
-		error-=PI;
-	} else if (error < -PI/2.0){
-		error+=PI;
+	if(error > 1.0){
+		error-=2.0;
+	} else if (error < -1.0){
+		error+=2.0;
 	}
+
+	RCLCPP_INFO(this->get_logger(), "error after warparound(norm, deg): %f, %f", error, error * 180.0);
 
 	double p_gain = 0.1;
 
