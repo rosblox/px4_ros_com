@@ -58,13 +58,12 @@ public:
 
 		publish_setpoint_and_arm();
 
-		setpoint_rad_ = -PI/2;
+		setpoint_rad_ = PI/2;
 
 		auto timer_callback = [this]() -> void {
 			// publish_offboard_control_mode();
 			publish_actuator_motors();
 		};
-
 
 		timer_ = this->create_wall_timer(5ms, timer_callback);
 	}
@@ -103,41 +102,51 @@ double quaternion_get_yaw(std::array<float,4> q){
 
 void OffboardControl::publish_actuator_motors() const {
 
+	// Yaw error
 	double yaw_measured_deg;
 	yaw_measured_deg = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
 	// RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured_deg);
-
 
 	double yaw_measured_normalized = yaw_measured_deg / 180.0;
 	double setpoint_normalized = setpoint_rad_ / PI;
 
 	auto error = setpoint_normalized - yaw_measured_normalized;
+	// RCLCPP_INFO(this->get_logger(), "error (normalized, deg): %f %f", error, error * 180.0);
 
-	RCLCPP_INFO(this->get_logger(), "error (normalized, deg): %f %f", error, error * 180.0);
-
-	// account for wrap-around at 180 deg
 	if(error > 1.0){
 		error-=2.0;
 	} else if (error < -1.0){
 		error+=2.0;
 	}
+	// RCLCPP_INFO(this->get_logger(), "error after warparound(norm, deg): %f, %f", error, error * 180.0);
 
-	RCLCPP_INFO(this->get_logger(), "error after warparound(norm, deg): %f, %f", error, error * 180.0);
 
+	// Yaw controller
 	double p_gain = 0.1;
 
 	double yaw_thrust = p_gain * error;
 	double yaw_thrust_left = yaw_thrust/2.0;
 	double yaw_thrust_right = -yaw_thrust/2.0;
 
-	const double yaw_thrust_limit_low = 0.0;
-	const double yaw_thrust_limit_high = 0.05;
+	const double yaw_thrust_limit = 0.05;
 
-	std::clamp(yaw_thrust_left, yaw_thrust_limit_low, yaw_thrust_limit_high);
-	std::clamp(yaw_thrust_right, yaw_thrust_limit_low, yaw_thrust_limit_high);
+	auto clk = *this->get_clock();
+	if(std::fabs(yaw_thrust_left)>yaw_thrust_limit){
+		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_left saturated");
+	} 
+	if(std::fabs(yaw_thrust_right)>yaw_thrust_limit){
+		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_right saturated");
+	}
+
+	yaw_thrust_left = std::clamp(yaw_thrust_left, -yaw_thrust_limit, yaw_thrust_limit);
+	yaw_thrust_right = std::clamp(yaw_thrust_right, -yaw_thrust_limit, yaw_thrust_limit);
 
 
-	double theta_thrust = 0.1;
+	// RCLCPP_INFO(this->get_logger(), "yaw_thrust (left, right): %f %f", yaw_thrust_left, yaw_thrust_right);
+
+
+
+	double theta_thrust = 0.01;
 
 	double thrust_left = theta_thrust + yaw_thrust_left;
 	double thrust_right = theta_thrust + yaw_thrust_right;
@@ -150,16 +159,34 @@ void OffboardControl::publish_actuator_motors() const {
 	// 	thrust_left += std::fabs(thrust_right);
 	// }
 
+	// RCLCPP_INFO(this->get_logger(), "thrust (left, right): %f %f", thrust_left, thrust_right);
 
 	const double thrust_limit_low = 0.0;
-	const double thrust_limit_high = 0.1;
-	std::clamp(thrust_left, thrust_limit_low, thrust_limit_high);
-	std::clamp(thrust_right, thrust_limit_low, thrust_limit_high);
+	const double thrust_limit_high = 0.2;
+
+	if(thrust_left>thrust_limit_high){
+		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left saturated");
+	} 
+	if(thrust_left<thrust_limit_low){
+		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left below limit");
+	} 
+	if(thrust_right>thrust_limit_high){
+		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_right saturated");
+	}
+	if(thrust_right<thrust_limit_low){
+		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_right below limit");
+	} 
+
+	thrust_left = std::clamp(thrust_left, thrust_limit_low, thrust_limit_high);
+	thrust_right = std::clamp(thrust_right, thrust_limit_low, thrust_limit_high);
+
+
+	RCLCPP_INFO(this->get_logger(), "thrust_limited (left, right): %f %f", thrust_left, thrust_right);
 
 
 	ActuatorMotors msg{};
 
-	msg.control = {(float) yaw_thrust_left, (float) yaw_thrust_right};
+	msg.control = {(float) thrust_left, (float) thrust_right};
 
 	actuator_motors_publisher_->publish(msg);
 }
