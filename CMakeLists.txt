@@ -86,15 +86,15 @@ function(custom_executable subfolder target)
     DESTINATION lib/${PROJECT_NAME})
 endfunction()
 
-# Add frame_transforms lib
-add_library(frame_transforms SHARED src/lib/frame_transforms.cpp)
-ament_target_dependencies(frame_transforms Eigen3 geometry_msgs sensor_msgs)
-target_include_directories(frame_transforms PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
-  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-  ${Eigen3_INCLUDE_DIRS}
-)
-target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} ${sensor_msgs_LIBRARIES})
+# # Add frame_transforms lib
+# add_library(frame_transforms SHARED src/lib/frame_transforms.cpp)
+# ament_target_dependencies(frame_transforms Eigen3 geometry_msgs sensor_msgs)
+# target_include_directories(frame_transforms PUBLIC
+# $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
+# $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+# ${Eigen3_INCLUDE_DIRS}
+# )
+# target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} ${sensor_msgs_LIBRARIES})
 
 # Add microRTPS agent
 # add_executable(micrortps_agent ${MICRORTPS_AGENT_FILES})
@@ -106,7 +106,7 @@ target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} 
 # custom_executable(examples/listeners vehicle_gps_position_listener)
 # custom_executable(examples/advertisers debug_vect_advertiser)
 custom_executable(examples/offboard offboard_control)
-target_link_libraries(offboard_control frame_transforms ${rclcpp_LIBRARIES})
+target_link_libraries(offboard_control ${rclcpp_LIBRARIES})
 
 # ###########
 # Install ##
@@ -119,15 +119,14 @@ else()
   ament_export_dependencies(ament_cmake rclcpp rosidl_default_runtime Eigen3 px4_msgs geometry_msgs sensor_msgs)
 endif()
 
-if(ROS_DISTRO IN_LIST USES_DEPRECATED_EXPORT_API)
-  ament_export_interfaces(export_frame_transforms HAS_LIBRARY_TARGET)
-else()
-  ament_export_targets(export_frame_transforms HAS_LIBRARY_TARGET)
-endif()
-
+# if(ROS_DISTRO IN_LIST USES_DEPRECATED_EXPORT_API)
+# ament_export_interfaces(export_frame_transforms HAS_LIBRARY_TARGET)
+# else()
+# ament_export_targets(export_frame_transforms HAS_LIBRARY_TARGET)
+# endif()
 ament_export_include_directories(include)
 
-ament_export_libraries(frame_transforms)
+# ament_export_libraries(frame_transforms)
 
 # Install header files
 install(DIRECTORY include/${PROJECT_NAME}/
@@ -139,13 +138,13 @@ install(DIRECTORY cmake
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(TARGETS frame_transforms
-  EXPORT export_frame_transforms
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
-)
+# install(TARGETS frame_transforms
+# EXPORT export_frame_transforms
+# ARCHIVE DESTINATION lib
+# LIBRARY DESTINATION lib
+# RUNTIME DESTINATION bin
+# INCLUDES DESTINATION include
+# )
 
 # install(TARGETS micrortps_agent
 # ARCHIVE DESTINATION lib/${PROJECT_NAME}
