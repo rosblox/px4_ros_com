@@ -122,13 +122,13 @@ void OffboardControl::publish_actuator_motors() const {
 
 
 	// Yaw controller
-	double p_gain = 0.1;
+	double p_gain = 0.2;
 
 	double yaw_thrust = p_gain * error;
 	double yaw_thrust_left = yaw_thrust/2.0;
 	double yaw_thrust_right = -yaw_thrust/2.0;
 
-	const double yaw_thrust_limit = 0.05;
+	const double yaw_thrust_limit = 0.15;
 
 	auto clk = *this->get_clock();
 	if(std::fabs(yaw_thrust_left)>yaw_thrust_limit){
@@ -146,7 +146,7 @@ void OffboardControl::publish_actuator_motors() const {
 
 
 
-	double theta_thrust = 0.01;
+	double theta_thrust = 0.1;
 
 	double thrust_left = theta_thrust + yaw_thrust_left;
 	double thrust_right = theta_thrust + yaw_thrust_right;
@@ -180,8 +180,7 @@ void OffboardControl::publish_actuator_motors() const {
 	thrust_left = std::clamp(thrust_left, thrust_limit_low, thrust_limit_high);
 	thrust_right = std::clamp(thrust_right, thrust_limit_low, thrust_limit_high);
 
-
-	RCLCPP_INFO(this->get_logger(), "thrust_limited (left, right): %f %f", thrust_left, thrust_right);
+	// RCLCPP_INFO(this->get_logger(), "thrust_limited (left, right): %f %f", thrust_left, thrust_right);
 
 
 	ActuatorMotors msg{};
