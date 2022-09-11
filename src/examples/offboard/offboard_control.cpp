@@ -51,7 +51,7 @@ public:
 				});
 
 		setpoint_sub_ =
-			this->create_subscription<std_msgs::msg::Float32>("vortex/setpoint", 10,
+			this->create_subscription<std_msgs::msg::Float32>("vortex/setpoint/rad", 10,
 				[this](const std_msgs::msg::Float32::UniquePtr msg) {
 					this->setpoint_rad_ = msg->data;
 				});
