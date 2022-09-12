@@ -7,6 +7,7 @@
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
 #include <std_msgs/msg/float32.hpp>
+#include <sensor_msgs/msg/joy.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
@@ -51,20 +52,21 @@ public:
 				});
 
 		setpoint_sub_ =
-			this->create_subscription<std_msgs::msg::Float32>("vortex/setpoint/rad", 10,
-				[this](const std_msgs::msg::Float32::UniquePtr msg) {
-					this->setpoint_rad_ = msg->data;
+			this->create_subscription<sensor_msgs::msg::Joy>("joy", 10,
+				[this](const sensor_msgs::msg::Joy::UniquePtr msg) {
+					this->setpoint_ = *msg;
 				});
 
-
+		std::vector<float> initial_axis_setpoints(8, 0.0);
+		setpoint_.axes = initial_axis_setpoints;
 
 
 
 		ptr = std::shared_ptr<rclcpp::Node>(this);
 
-		this->declare_parameter<double>("pid.p", 0.0);
+		this->declare_parameter<double>("pid.p", 0.25);
 		this->declare_parameter<double>("pid.i", 0.0);
-		this->declare_parameter<double>("pid.d", 0.0);
+		this->declare_parameter<double>("pid.d", 0.1);
 		this->declare_parameter<double>("pid.i_clamp_max", 0.0);
 		this->declare_parameter<double>("pid.i_clamp_min", 0.0);
 		this->declare_parameter<bool>("pid.antiwindup", false);
@@ -74,14 +76,14 @@ public:
 
 		publish_setpoint_and_arm();
 
-		setpoint_rad_ = PI/2;
 
 		auto timer_callback = [this]() -> void {
 			// publish_offboard_control_mode();
 			publish_actuator_motors();
 		};
 
-		timer_ = this->create_wall_timer(5ms, timer_callback);
+		period_ = 20ms;
+		timer_ = this->create_wall_timer(period_, timer_callback);
 	}
 
 	void arm() const;
@@ -89,19 +91,20 @@ public:
 	void publish_setpoint_and_arm() const;
 
 private:
+	std::chrono::milliseconds period_;
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
 	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
-	rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr setpoint_sub_;
+	rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr setpoint_sub_;
 
 	std::shared_ptr<rclcpp::Node> ptr;
 	std::shared_ptr<control_toolbox::PidROS> pid;
 
 	std::array<float, 4> vehicle_orientation_;
-	double setpoint_rad_;
+	sensor_msgs::msg::Joy setpoint_;
 
 	void publish_offboard_control_mode() const;
 	void publish_actuator_motors() const;
@@ -127,9 +130,11 @@ void OffboardControl::publish_actuator_motors() const {
 	// RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured_deg);
 
 	double yaw_measured_normalized = yaw_measured_deg / 180.0;
-	double setpoint_normalized = setpoint_rad_ / PI;
 
-	auto error = setpoint_normalized - yaw_measured_normalized;
+	double yaw_setpoint = setpoint_.axes[2];
+	double yaw_setpoint_normalized = yaw_setpoint;
+
+	auto error = yaw_setpoint_normalized - yaw_measured_normalized;
 	// RCLCPP_INFO(this->get_logger(), "error (normalized, deg): %f %f", error, error * 180.0);
 
 	if(error > 1.0){
@@ -140,16 +145,13 @@ void OffboardControl::publish_actuator_motors() const {
 	// RCLCPP_INFO(this->get_logger(), "error after warparound(norm, deg): %f, %f", error, error * 180.0);
 
 
-	double command = pid->computeCommand(error, 5ms);
-	RCLCPP_INFO(this->get_logger(), "error/command): %f, %f", error * 180.0, command);
-
-	// Yaw controller
-	double p_gain = 0.05;
-
-	double yaw_thrust = p_gain * error;
+	double yaw_thrust = pid->computeCommand(error, period_);
 	double yaw_thrust_left = yaw_thrust/2.0;
 	double yaw_thrust_right = -yaw_thrust/2.0;
 
+
+
+	// This whole section should not be needed...
 	const double yaw_thrust_limit = 0.1;
 
 	auto clk = *this->get_clock();
@@ -162,7 +164,7 @@ void OffboardControl::publish_actuator_motors() const {
 
 	yaw_thrust_left = std::clamp(yaw_thrust_left, -yaw_thrust_limit, yaw_thrust_limit);
 	yaw_thrust_right = std::clamp(yaw_thrust_right, -yaw_thrust_limit, yaw_thrust_limit);
-
+	// ... until here.
 
 	// RCLCPP_INFO(this->get_logger(), "yaw_thrust (left, right): %f %f", yaw_thrust_left, yaw_thrust_right);
 
@@ -184,7 +186,7 @@ void OffboardControl::publish_actuator_motors() const {
 	// RCLCPP_INFO(this->get_logger(), "thrust (left, right): %f %f", thrust_left, thrust_right);
 
 	const double thrust_limit_low = 0.0;
-	const double thrust_limit_high = 0.1; //0.25; // MAX 0.3 -> 5A
+	const double thrust_limit_high = 0.25; // MAX 0.3 -> 5A
 
 	if(thrust_left>thrust_limit_high){
 		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left saturated");

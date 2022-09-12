@@ -81,6 +81,7 @@ function(custom_executable subfolder target)
     px4_msgs
     control_toolbox
     control_msgs
+    sensor_msgs
   )
   install(TARGETS ${target}
     DESTINATION lib/${PROJECT_NAME})
