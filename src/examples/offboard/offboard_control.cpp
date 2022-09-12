@@ -56,6 +56,22 @@ public:
 					this->setpoint_rad_ = msg->data;
 				});
 
+
+
+
+
+		ptr = std::shared_ptr<rclcpp::Node>(this);
+
+		this->declare_parameter<double>("pid.p", 0.0);
+		this->declare_parameter<double>("pid.i", 0.0);
+		this->declare_parameter<double>("pid.d", 0.0);
+		this->declare_parameter<double>("pid.i_clamp_max", 0.0);
+		this->declare_parameter<double>("pid.i_clamp_min", 0.0);
+		this->declare_parameter<bool>("pid.antiwindup", false);
+
+		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
+		pid->initPid();
+
 		publish_setpoint_and_arm();
 
 		setpoint_rad_ = PI/2;
@@ -80,6 +96,9 @@ private:
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
 	rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr setpoint_sub_;
+
+	std::shared_ptr<rclcpp::Node> ptr;
+	std::shared_ptr<control_toolbox::PidROS> pid;
 
 	std::array<float, 4> vehicle_orientation_;
 	double setpoint_rad_;
@@ -121,14 +140,17 @@ void OffboardControl::publish_actuator_motors() const {
 	// RCLCPP_INFO(this->get_logger(), "error after warparound(norm, deg): %f, %f", error, error * 180.0);
 
 
+	double command = pid->computeCommand(error, 5ms);
+	RCLCPP_INFO(this->get_logger(), "error/command): %f, %f", error * 180.0, command);
+
 	// Yaw controller
-	double p_gain = 0.2;
+	double p_gain = 0.05;
 
 	double yaw_thrust = p_gain * error;
 	double yaw_thrust_left = yaw_thrust/2.0;
 	double yaw_thrust_right = -yaw_thrust/2.0;
 
-	const double yaw_thrust_limit = 0.15;
+	const double yaw_thrust_limit = 0.1;
 
 	auto clk = *this->get_clock();
 	if(std::fabs(yaw_thrust_left)>yaw_thrust_limit){
@@ -162,7 +184,7 @@ void OffboardControl::publish_actuator_motors() const {
 	// RCLCPP_INFO(this->get_logger(), "thrust (left, right): %f %f", thrust_left, thrust_right);
 
 	const double thrust_limit_low = 0.0;
-	const double thrust_limit_high = 0.2;
+	const double thrust_limit_high = 0.1; //0.25; // MAX 0.3 -> 5A
 
 	if(thrust_left>thrust_limit_high){
 		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left saturated");
