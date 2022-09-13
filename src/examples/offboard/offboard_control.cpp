@@ -21,6 +21,14 @@
 
 const double PI = std::atan(1.0)*4;
 
+const int X_BUTTON = 1;
+const int TRIANGLE_BUTTON = 3;
+const int R1_BUTTON = 5;
+const int R2_BUTTON = 7;
+
+const double PHI_OFFSET_DEG = 40.0;
+const double MAX_THRUST = 0.35;
+
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
@@ -51,14 +59,41 @@ public:
 					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
 				});
 
+		enable_thrust_ = true;
+		theta_thrust_ = 0.05;
+		yaw_setpoint_deg_ = PHI_OFFSET_DEG;
+
 		setpoint_sub_ =
 			this->create_subscription<sensor_msgs::msg::Joy>("joy", 10,
 				[this](const sensor_msgs::msg::Joy::UniquePtr msg) {
+
+					if(msg->buttons[R2_BUTTON]){
+						enable_thrust_ = false;
+					}
+					if(msg->buttons[R1_BUTTON]){
+						enable_thrust_ = true;
+					}
+					if(!this->setpoint_.buttons[TRIANGLE_BUTTON] && msg->buttons[TRIANGLE_BUTTON]){
+						theta_thrust_+= 0.075;
+						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_);
+					}
+					if(!this->setpoint_.buttons[X_BUTTON] && msg->buttons[X_BUTTON]){
+						theta_thrust_-= 0.075;
+						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_);
+					}
+
+					// yaw_setpoint_deg_ = setpoint_.axes[2] - PHI_OFFSET_DEG;
+
+
 					this->setpoint_ = *msg;
+
 				});
 
-		std::vector<float> initial_axis_setpoints(8, 0.0);
-		setpoint_.axes = initial_axis_setpoints;
+		std::vector<float> initial_axes_setpoints(8, 0.0);
+		std::vector<int> initial_buttons_setpoints(14, 0);
+
+		setpoint_.axes = initial_axes_setpoints;
+		setpoint_.buttons = initial_buttons_setpoints;
 
 
 
@@ -105,7 +140,12 @@ private:
 
 	std::array<float, 4> vehicle_orientation_;
 	sensor_msgs::msg::Joy setpoint_;
+	double theta_thrust_;
+	double yaw_setpoint_deg_;
 
+
+	bool enable_thrust_;
+	
 	void publish_offboard_control_mode() const;
 	void publish_actuator_motors() const;
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0) const;
@@ -124,15 +164,21 @@ double quaternion_get_yaw(std::array<float,4> q){
 
 void OffboardControl::publish_actuator_motors() const {
 
+	if(!enable_thrust_){
+		ActuatorMotors msg{};
+		msg.control = {0.0, 0.0};
+		actuator_motors_publisher_->publish(msg);
+		return;
+	}
+
+
 	// Yaw error
 	double yaw_measured_deg;
 	yaw_measured_deg = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
 	// RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured_deg);
 
 	double yaw_measured_normalized = yaw_measured_deg / 180.0;
-
-	double yaw_setpoint = setpoint_.axes[2];
-	double yaw_setpoint_normalized = yaw_setpoint;
+	double yaw_setpoint_normalized = yaw_setpoint_deg_ / 180.0;
 
 	auto error = yaw_setpoint_normalized - yaw_measured_normalized;
 	// RCLCPP_INFO(this->get_logger(), "error (normalized, deg): %f %f", error, error * 180.0);
@@ -170,10 +216,8 @@ void OffboardControl::publish_actuator_motors() const {
 
 
 
-	double theta_thrust = 0.1;
-
-	double thrust_left = theta_thrust + yaw_thrust_left;
-	double thrust_right = theta_thrust + yaw_thrust_right;
+	double thrust_left = theta_thrust_ + yaw_thrust_left;
+	double thrust_right = theta_thrust_ + yaw_thrust_right;
 
 	// //maybe this is not needed
 	// if(thrust_left < 0.0){
@@ -186,7 +230,7 @@ void OffboardControl::publish_actuator_motors() const {
 	// RCLCPP_INFO(this->get_logger(), "thrust (left, right): %f %f", thrust_left, thrust_right);
 
 	const double thrust_limit_low = 0.0;
-	const double thrust_limit_high = 0.25; // MAX 0.3 -> 5A
+	const double thrust_limit_high = MAX_THRUST; // MAX 0.3 -> 5A
 
 	if(thrust_left>thrust_limit_high){
 		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left saturated");
