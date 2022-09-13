@@ -26,6 +26,8 @@ const int X_BUTTON = 1;
 const int TRIANGLE_BUTTON = 3;
 const int R1_BUTTON = 5;
 const int R2_BUTTON = 7;
+const int L1_BUTTON = 4;
+const int L2_BUTTON = 6;
 
 const int LEFT_BUTTON = 6;
 const int RIGHT_BUTTON = 6;
@@ -68,10 +70,12 @@ public:
 			this->create_subscription<px4_msgs::msg::SensorCombined>("fmu/out/SensorCombined", 10,
 				[this](const px4_msgs::msg::SensorCombined::UniquePtr msg) {
 					this->accelerometer_m_s2_ = msg->accelerometer_m_s2;
+					this->gyro_rad_ = msg->gyro_rad;
 					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
 				});
 
 		enable_thrust_ = true;
+		enable_stabilization_ = false;
 		theta_thrust_setpoint_ = 0.05;
 		yaw_setpoint_deg_ = PHI_OFFSET_DEG;
 
@@ -85,6 +89,15 @@ public:
 					if(msg->buttons[R1_BUTTON]){
 						enable_thrust_ = true;
 					}
+					if(msg->buttons[L1_BUTTON]==1){
+						enable_stabilization_ = true;
+						RCLCPP_INFO(this->get_logger(), "stabilization: %d", enable_stabilization_);
+					}
+					if(msg->buttons[L2_BUTTON]==1){
+						enable_stabilization_ = false;
+						RCLCPP_INFO(this->get_logger(), "stabilization: %d", enable_stabilization_);
+					}		
+
 					if(!this->setpoint_.buttons[TRIANGLE_BUTTON] && msg->buttons[TRIANGLE_BUTTON]){
 						theta_thrust_setpoint_+= 0.075;
 						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_setpoint_);
@@ -137,7 +150,20 @@ public:
 		this->declare_parameter<bool>("pid.antiwindup", false);
 
 		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
+
+		this->declare_parameter<double>("stabilization_pid.p", 0.05);
+		this->declare_parameter<double>("stabilization_pid.i", 0.0);
+		this->declare_parameter<double>("stabilization_pid.d", 0.0);
+		this->declare_parameter<double>("stabilization_pid.i_clamp_max", 0.0);
+		this->declare_parameter<double>("stabilization_pid.i_clamp_min", 0.0);
+		this->declare_parameter<bool>("stabilization_pid.antiwindup", false);
+
+		stabilization_pid = std::make_shared<control_toolbox::PidROS>(ptr, "stabilization_pid");
+
+
 		pid->initPid();
+
+		stabilization_pid->initPid();
 
 		publish_setpoint_and_arm();
 
@@ -169,16 +195,19 @@ private:
 
 	std::shared_ptr<rclcpp::Node> ptr;
 	std::shared_ptr<control_toolbox::PidROS> pid;
+	std::shared_ptr<control_toolbox::PidROS> stabilization_pid;
 
 	std::array<float, 4> vehicle_orientation_;
 	std::array<float, 3> accelerometer_m_s2_;
+	std::array<float, 3> gyro_rad_;
 	sensor_msgs::msg::Joy setpoint_;
 	double theta_thrust_setpoint_;
 	double yaw_setpoint_deg_;
 
 
 	bool enable_thrust_;
-	
+	bool enable_stabilization_; 
+
 	void publish_offboard_control_mode() const;
 	void publish_actuator_motors() const;
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0) const;
@@ -247,10 +276,20 @@ void OffboardControl::publish_actuator_motors() const {
 
 	// RCLCPP_INFO(this->get_logger(), "yaw_thrust (left, right): %f %f", yaw_thrust_left, yaw_thrust_right);
 
+	double stabilization_error = -gyro_rad_[1];
+	double stabilization_thrust = stabilization_pid->computeCommand(stabilization_error, period_);
+
+	// RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 1000, "stabilization_thrust: %f", stabilization_thrust);
 
 
 	double thrust_left = theta_thrust_setpoint_ + yaw_thrust_left;
 	double thrust_right = theta_thrust_setpoint_ + yaw_thrust_right;
+
+	if(enable_stabilization_){
+		thrust_left += stabilization_thrust;
+		thrust_right += stabilization_thrust;
+	}
+
 
 	// //maybe this is not needed
 	// if(thrust_left < 0.0){
