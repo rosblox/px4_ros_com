@@ -151,19 +151,19 @@ public:
 
 		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
 
-		this->declare_parameter<double>("stabilization_pid.p", 0.05);
-		this->declare_parameter<double>("stabilization_pid.i", 0.0);
-		this->declare_parameter<double>("stabilization_pid.d", 0.0);
-		this->declare_parameter<double>("stabilization_pid.i_clamp_max", 0.0);
-		this->declare_parameter<double>("stabilization_pid.i_clamp_min", 0.0);
-		this->declare_parameter<bool>("stabilization_pid.antiwindup", false);
+		// this->declare_parameter<double>("stabilization_pid.p", 0.05);
+		// this->declare_parameter<double>("stabilization_pid.i", 0.0);
+		// this->declare_parameter<double>("stabilization_pid.d", 0.0);
+		// this->declare_parameter<double>("stabilization_pid.i_clamp_max", 0.0);
+		// this->declare_parameter<double>("stabilization_pid.i_clamp_min", 0.0);
+		// this->declare_parameter<bool>("stabilization_pid.antiwindup", false);
 
-		stabilization_pid = std::make_shared<control_toolbox::PidROS>(ptr, "stabilization_pid");
+		// stabilization_pid = std::make_shared<control_toolbox::PidROS>(ptr, "stabilization_pid");
 
 
 		pid->initPid();
 
-		stabilization_pid->initPid();
+		// stabilization_pid->initPid();
 
 		publish_setpoint_and_arm();
 
@@ -195,7 +195,7 @@ private:
 
 	std::shared_ptr<rclcpp::Node> ptr;
 	std::shared_ptr<control_toolbox::PidROS> pid;
-	std::shared_ptr<control_toolbox::PidROS> stabilization_pid;
+	// std::shared_ptr<control_toolbox::PidROS> stabilization_pid;
 
 	std::array<float, 4> vehicle_orientation_;
 	std::array<float, 3> accelerometer_m_s2_;
@@ -276,8 +276,8 @@ void OffboardControl::publish_actuator_motors() const {
 
 	// RCLCPP_INFO(this->get_logger(), "yaw_thrust (left, right): %f %f", yaw_thrust_left, yaw_thrust_right);
 
-	double stabilization_error = -gyro_rad_[1];
-	double stabilization_thrust = stabilization_pid->computeCommand(stabilization_error, period_);
+	// double stabilization_error = -gyro_rad_[1];
+	// double stabilization_thrust = stabilization_pid->computeCommand(stabilization_error, period_);
 
 	// RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 1000, "stabilization_thrust: %f", stabilization_thrust);
 
@@ -285,10 +285,10 @@ void OffboardControl::publish_actuator_motors() const {
 	double thrust_left = theta_thrust_setpoint_ + yaw_thrust_left;
 	double thrust_right = theta_thrust_setpoint_ + yaw_thrust_right;
 
-	if(enable_stabilization_){
-		thrust_left += stabilization_thrust;
-		thrust_right += stabilization_thrust;
-	}
+	// if(enable_stabilization_){
+	// 	thrust_left += stabilization_thrust;
+	// 	thrust_right += stabilization_thrust;
+	// }
 
 
 	// //maybe this is not needed
