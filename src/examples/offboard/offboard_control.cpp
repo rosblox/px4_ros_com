@@ -26,7 +26,11 @@ const int TRIANGLE_BUTTON = 3;
 const int R1_BUTTON = 5;
 const int R2_BUTTON = 7;
 
-const double PHI_OFFSET_DEG = 40.0;
+const int LEFT_BUTTON = 6;
+const int RIGHT_BUTTON = 6;
+
+
+const double PHI_OFFSET_DEG = 40;
 const double MAX_THRUST = 0.35;
 
 using namespace std::chrono;
@@ -82,6 +86,14 @@ public:
 						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_);
 					}
 
+					if(std::fabs(this->setpoint_.axes[LEFT_BUTTON]) < 1e-3 && 1-1e-3 < msg->axes[LEFT_BUTTON]){
+						yaw_setpoint_deg_ -= 10;
+						RCLCPP_INFO(this->get_logger(), "yaw_setpoint_deg: %f", yaw_setpoint_deg_);
+					}
+					if(std::fabs(this->setpoint_.axes[RIGHT_BUTTON]) > -1e-3 && msg->axes[RIGHT_BUTTON] < -1+1e+3){
+						yaw_setpoint_deg_ += 10;
+						RCLCPP_INFO(this->get_logger(), "yaw_setpoint_deg: %f", yaw_setpoint_deg_);
+					}
 					// yaw_setpoint_deg_ = setpoint_.axes[2] - PHI_OFFSET_DEG;
 
 
