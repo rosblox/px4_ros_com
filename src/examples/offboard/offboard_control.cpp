@@ -67,7 +67,7 @@ public:
 		theta_thrust_ = 0.05;
 		yaw_setpoint_deg_ = PHI_OFFSET_DEG;
 
-		setpoint_sub_ =
+		joystick_sub_ =
 			this->create_subscription<sensor_msgs::msg::Joy>("joy", 10,
 				[this](const sensor_msgs::msg::Joy::UniquePtr msg) {
 
@@ -90,16 +90,16 @@ public:
 						yaw_setpoint_deg_ -= 10;
 						RCLCPP_INFO(this->get_logger(), "yaw_setpoint_deg: %f", yaw_setpoint_deg_);
 					}
-					if(std::fabs(this->setpoint_.axes[RIGHT_BUTTON]) > -1e-3 && msg->axes[RIGHT_BUTTON] < -1+1e+3){
+					if(std::fabs(this->setpoint_.axes[RIGHT_BUTTON]) < 1e-3 && msg->axes[RIGHT_BUTTON] < -1+1e-3){
 						yaw_setpoint_deg_ += 10;
 						RCLCPP_INFO(this->get_logger(), "yaw_setpoint_deg: %f", yaw_setpoint_deg_);
 					}
 					// yaw_setpoint_deg_ = setpoint_.axes[2] - PHI_OFFSET_DEG;
 
-
 					this->setpoint_ = *msg;
-
 				});
+
+		
 
 		std::vector<float> initial_axes_setpoints(8, 0.0);
 		std::vector<int> initial_buttons_setpoints(14, 0);
@@ -145,7 +145,7 @@ private:
 	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
-	rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr setpoint_sub_;
+	rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joystick_sub_;
 
 	std::shared_ptr<rclcpp::Node> ptr;
 	std::shared_ptr<control_toolbox::PidROS> pid;
@@ -208,21 +208,21 @@ void OffboardControl::publish_actuator_motors() const {
 	double yaw_thrust_right = -yaw_thrust/2.0;
 
 
-
-	// This whole section should not be needed...
-	const double yaw_thrust_limit = 0.1;
-
 	auto clk = *this->get_clock();
-	if(std::fabs(yaw_thrust_left)>yaw_thrust_limit){
-		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_left saturated");
-	} 
-	if(std::fabs(yaw_thrust_right)>yaw_thrust_limit){
-		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_right saturated");
-	}
 
-	yaw_thrust_left = std::clamp(yaw_thrust_left, -yaw_thrust_limit, yaw_thrust_limit);
-	yaw_thrust_right = std::clamp(yaw_thrust_right, -yaw_thrust_limit, yaw_thrust_limit);
-	// ... until here.
+	// // This whole section should not be needed...
+	// const double yaw_thrust_limit = 0.1;
+
+	// if(std::fabs(yaw_thrust_left)>yaw_thrust_limit){
+	// 	RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_left saturated");
+	// } 
+	// if(std::fabs(yaw_thrust_right)>yaw_thrust_limit){
+	// 	RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_right saturated");
+	// }
+
+	// yaw_thrust_left = std::clamp(yaw_thrust_left, -yaw_thrust_limit, yaw_thrust_limit);
+	// yaw_thrust_right = std::clamp(yaw_thrust_right, -yaw_thrust_limit, yaw_thrust_limit);
+	// // ... until here.
 
 	// RCLCPP_INFO(this->get_logger(), "yaw_thrust (left, right): %f %f", yaw_thrust_left, yaw_thrust_right);
 
