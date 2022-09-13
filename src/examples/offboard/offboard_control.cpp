@@ -4,9 +4,10 @@
 #include <px4_msgs/msg/actuator_motors.hpp>
 // #include <px4_msgs/msg/timesync.hpp>
 #include <px4_msgs/msg/vehicle_odometry.hpp>
+#include <px4_msgs/msg/sensor_combined.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
-#include <std_msgs/msg/float32.hpp>
+#include <geometry_msgs/msg/vector3.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
@@ -63,8 +64,15 @@ public:
 					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
 				});
 
+		sensor_combined_sub_ =
+			this->create_subscription<px4_msgs::msg::SensorCombined>("fmu/out/SensorCombined", 10,
+				[this](const px4_msgs::msg::SensorCombined::UniquePtr msg) {
+					this->accelerometer_m_s2_ = msg->accelerometer_m_s2;
+					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
+				});
+
 		enable_thrust_ = true;
-		theta_thrust_ = 0.05;
+		theta_thrust_setpoint_ = 0.05;
 		yaw_setpoint_deg_ = PHI_OFFSET_DEG;
 
 		joystick_sub_ =
@@ -78,12 +86,12 @@ public:
 						enable_thrust_ = true;
 					}
 					if(!this->setpoint_.buttons[TRIANGLE_BUTTON] && msg->buttons[TRIANGLE_BUTTON]){
-						theta_thrust_+= 0.075;
-						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_);
+						theta_thrust_setpoint_+= 0.075;
+						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_setpoint_);
 					}
 					if(!this->setpoint_.buttons[X_BUTTON] && msg->buttons[X_BUTTON]){
-						theta_thrust_-= 0.075;
-						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_);
+						theta_thrust_setpoint_-= 0.075;
+						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_setpoint_);
 					}
 
 					if(std::fabs(this->setpoint_.axes[LEFT_BUTTON]) < 1e-3 && 1-1e-3 < msg->axes[LEFT_BUTTON]){
@@ -99,6 +107,16 @@ public:
 					this->setpoint_ = *msg;
 				});
 
+		setpoint_sub_ =
+			this->create_subscription<geometry_msgs::msg::Vector3>("setpoint", 10,
+				[this](const geometry_msgs::msg::Vector3::UniquePtr msg) {
+					// x: normalized thrust
+					// y: yaw_deg
+					theta_thrust_setpoint_= msg->x * MAX_THRUST;
+					yaw_setpoint_deg_= msg->y;
+					RCLCPP_INFO(this->get_logger(), "theta_thrust_setpoint_, yaw_deg_setpoint: %f, %f", theta_thrust_setpoint_, yaw_setpoint_deg_);
+
+				});
 		
 
 		std::vector<float> initial_axes_setpoints(8, 0.0);
@@ -145,14 +163,17 @@ private:
 	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
+	rclcpp::Subscription<px4_msgs::msg::SensorCombined>::SharedPtr sensor_combined_sub_;
 	rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joystick_sub_;
+	rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr setpoint_sub_;
 
 	std::shared_ptr<rclcpp::Node> ptr;
 	std::shared_ptr<control_toolbox::PidROS> pid;
 
 	std::array<float, 4> vehicle_orientation_;
+	std::array<float, 3> accelerometer_m_s2_;
 	sensor_msgs::msg::Joy setpoint_;
-	double theta_thrust_;
+	double theta_thrust_setpoint_;
 	double yaw_setpoint_deg_;
 
 
@@ -228,8 +249,8 @@ void OffboardControl::publish_actuator_motors() const {
 
 
 
-	double thrust_left = theta_thrust_ + yaw_thrust_left;
-	double thrust_right = theta_thrust_ + yaw_thrust_right;
+	double thrust_left = theta_thrust_setpoint_ + yaw_thrust_left;
+	double thrust_right = theta_thrust_setpoint_ + yaw_thrust_right;
 
 	// //maybe this is not needed
 	// if(thrust_left < 0.0){

@@ -82,6 +82,7 @@ function(custom_executable subfolder target)
     control_toolbox
     control_msgs
     sensor_msgs
+    geometry_msgs
   )
   install(TARGETS ${target}
     DESTINATION lib/${PROJECT_NAME})
