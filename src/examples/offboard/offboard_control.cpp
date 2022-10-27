@@ -34,7 +34,7 @@ const int RIGHT_BUTTON = 6;
 
 
 const double PHI_OFFSET_DEG = 40;
-const double MAX_THRUST = 0.35;
+const double MAX_THRUST = 0.45;
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
