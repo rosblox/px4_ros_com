@@ -1,21 +1,15 @@
 #include <px4_msgs/msg/offboard_control_mode.hpp>
-// #include <px4_msgs/msg/trajectory_setpoint.hpp>
-// #include <px4_msgs/msg/vehicle_attitude_setpoint.hpp>
 #include <px4_msgs/msg/actuator_motors.hpp>
-// #include <px4_msgs/msg/timesync.hpp>
 #include <px4_msgs/msg/vehicle_odometry.hpp>
 #include <px4_msgs/msg/sensor_combined.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
-#include <sensor_msgs/msg/joy.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 
-// #include <px4_ros_com/frame_transforms.h>
 #include <control_toolbox/pid_ros.hpp>
 
-// control_toolbox::Pid
 #include <math.h>
 #include <chrono>
 #include <iostream>
@@ -32,9 +26,9 @@ const int L2_BUTTON = 6;
 const int LEFT_BUTTON = 6;
 const int RIGHT_BUTTON = 6;
 
-
-const double PHI_OFFSET_DEG = 40;
-const double MAX_THRUST = 0.45;
+const double MIN_THRUST = 0.0;
+const double MAX_THRUST = 0.3;
+// MAX 0.3 -> 5A
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
@@ -63,92 +57,30 @@ public:
 			this->create_subscription<px4_msgs::msg::VehicleOdometry>("fmu/out/VehicleOdometry", 10,
 				[this](const px4_msgs::msg::VehicleOdometry::UniquePtr msg) {
 					this->vehicle_orientation_ = msg->q;
-					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
-				});
-
-		sensor_combined_sub_ =
-			this->create_subscription<px4_msgs::msg::SensorCombined>("fmu/out/SensorCombined", 10,
-				[this](const px4_msgs::msg::SensorCombined::UniquePtr msg) {
-					this->accelerometer_m_s2_ = msg->accelerometer_m_s2;
-					this->gyro_rad_ = msg->gyro_rad;
-					// RCLCPP_INFO(this->get_logger(), "%f, %f", msg->q[0], msg->q[3]);
-				});
-
-		enable_thrust_ = true;
-		enable_stabilization_ = false;
-		theta_thrust_setpoint_ = 0.05;
-		yaw_setpoint_deg_ = PHI_OFFSET_DEG;
-
-		joystick_sub_ =
-			this->create_subscription<sensor_msgs::msg::Joy>("joy", 10,
-				[this](const sensor_msgs::msg::Joy::UniquePtr msg) {
-
-					if(msg->buttons[R2_BUTTON]){
-						enable_thrust_ = false;
-					}
-					if(msg->buttons[R1_BUTTON]){
-						enable_thrust_ = true;
-					}
-					if(msg->buttons[L1_BUTTON]==1){
-						enable_stabilization_ = true;
-						RCLCPP_INFO(this->get_logger(), "stabilization: %d", enable_stabilization_);
-					}
-					if(msg->buttons[L2_BUTTON]==1){
-						enable_stabilization_ = false;
-						RCLCPP_INFO(this->get_logger(), "stabilization: %d", enable_stabilization_);
-					}		
-
-					if(!this->setpoint_.buttons[TRIANGLE_BUTTON] && msg->buttons[TRIANGLE_BUTTON]){
-						theta_thrust_setpoint_+= 0.075;
-						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_setpoint_);
-					}
-					if(!this->setpoint_.buttons[X_BUTTON] && msg->buttons[X_BUTTON]){
-						theta_thrust_setpoint_-= 0.075;
-						RCLCPP_INFO(this->get_logger(), "theta_thrust: %f", theta_thrust_setpoint_);
-					}
-
-					if(std::fabs(this->setpoint_.axes[LEFT_BUTTON]) < 1e-3 && 1-1e-3 < msg->axes[LEFT_BUTTON]){
-						yaw_setpoint_deg_ -= 10;
-						RCLCPP_INFO(this->get_logger(), "yaw_setpoint_deg: %f", yaw_setpoint_deg_);
-					}
-					if(std::fabs(this->setpoint_.axes[RIGHT_BUTTON]) < 1e-3 && msg->axes[RIGHT_BUTTON] < -1+1e-3){
-						yaw_setpoint_deg_ += 10;
-						RCLCPP_INFO(this->get_logger(), "yaw_setpoint_deg: %f", yaw_setpoint_deg_);
-					}
-					// yaw_setpoint_deg_ = setpoint_.axes[2] - PHI_OFFSET_DEG;
-
-					this->setpoint_ = *msg;
 				});
 
 		setpoint_sub_ =
 			this->create_subscription<geometry_msgs::msg::Vector3>("setpoint", 10,
 				[this](const geometry_msgs::msg::Vector3::UniquePtr msg) {
-					// x: normalized thrust
-					// y: yaw_deg
-					theta_thrust_setpoint_= msg->x * MAX_THRUST;
-					yaw_setpoint_deg_= msg->y;
-					RCLCPP_INFO(this->get_logger(), "theta_thrust_setpoint_, yaw_deg_setpoint: %f, %f", theta_thrust_setpoint_, yaw_setpoint_deg_);
-
+					setpoint_ = *msg;
 				});
 		
 
-		std::vector<float> initial_axes_setpoints(8, 0.0);
-		std::vector<int> initial_buttons_setpoints(14, 0);
+		enable_thrust_ = true;
 
-		setpoint_.axes = initial_axes_setpoints;
-		setpoint_.buttons = initial_buttons_setpoints;
+		setpoint_.x = 0.0;
+		setpoint_.y = 0.05;
+		setpoint_.z = 0.0;
 
 
+		this->declare_parameter<double>("pid.p", 0.001);
+		this->declare_parameter<double>("pid.i", 0.0);
+		this->declare_parameter<double>("pid.d", 0.0005);
+		this->declare_parameter<double>("pid.i_clamp_max", 0.1);
+		this->declare_parameter<double>("pid.i_clamp_min", -0.1);
+		this->declare_parameter<bool>("pid.antiwindup", true);
 
 		ptr = std::shared_ptr<rclcpp::Node>(this);
-
-		this->declare_parameter<double>("pid.p", 0.25);
-		this->declare_parameter<double>("pid.i", 0.0);
-		this->declare_parameter<double>("pid.d", 0.1);
-		this->declare_parameter<double>("pid.i_clamp_max", 0.0);
-		this->declare_parameter<double>("pid.i_clamp_min", 0.0);
-		this->declare_parameter<bool>("pid.antiwindup", false);
-
 		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
 
 		// this->declare_parameter<double>("stabilization_pid.p", 0.05);
@@ -189,8 +121,6 @@ private:
 	rclcpp::Publisher<ActuatorMotors>::SharedPtr actuator_motors_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr vehicle_odometry_sub_;
-	rclcpp::Subscription<px4_msgs::msg::SensorCombined>::SharedPtr sensor_combined_sub_;
-	rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joystick_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr setpoint_sub_;
 
 	std::shared_ptr<rclcpp::Node> ptr;
@@ -198,15 +128,9 @@ private:
 	// std::shared_ptr<control_toolbox::PidROS> stabilization_pid;
 
 	std::array<float, 4> vehicle_orientation_;
-	std::array<float, 3> accelerometer_m_s2_;
-	std::array<float, 3> gyro_rad_;
-	sensor_msgs::msg::Joy setpoint_;
-	double theta_thrust_setpoint_;
-	double yaw_setpoint_deg_;
-
+	geometry_msgs::msg::Vector3 setpoint_;
 
 	bool enable_thrust_;
-	bool enable_stabilization_; 
 
 	void publish_offboard_control_mode() const;
 	void publish_actuator_motors() const;
@@ -224,7 +148,13 @@ double quaternion_get_yaw(std::array<float,4> q){
 	return atan2f(a, b);
 }
 
+
+// RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured_deg);
+// RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left saturated");
+
 void OffboardControl::publish_actuator_motors() const {
+
+	auto clk = *this->get_clock();
 
 	if(!enable_thrust_){
 		ActuatorMotors msg{};
@@ -234,95 +164,40 @@ void OffboardControl::publish_actuator_motors() const {
 	}
 
 
+
 	// Yaw error
-	double yaw_measured_deg;
-	yaw_measured_deg = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
-	// RCLCPP_INFO(this->get_logger(), "yaw_calculated: %f", yaw_measured_deg);
+	double yaw_measured_deg = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
 
-	double yaw_measured_normalized = yaw_measured_deg / 180.0;
-	double yaw_setpoint_normalized = yaw_setpoint_deg_ / 180.0;
+	auto error = setpoint_.x - yaw_measured_deg;
+	// RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 100, "(error): (%f)", error);
 
-	auto error = yaw_setpoint_normalized - yaw_measured_normalized;
-	// RCLCPP_INFO(this->get_logger(), "error (normalized, deg): %f %f", error, error * 180.0);
-
-	if(error > 1.0){
-		error-=2.0;
-	} else if (error < -1.0){
-		error+=2.0;
+	if(error > 180.0){
+		error-=360.0;
+	} else if (error < -180.0){
+		error+=360.0;
 	}
-	// RCLCPP_INFO(this->get_logger(), "error after warparound(norm, deg): %f, %f", error, error * 180.0);
-
 
 	double yaw_thrust = pid->computeCommand(error, period_);
-	double yaw_thrust_left = yaw_thrust/2.0;
-	double yaw_thrust_right = -yaw_thrust/2.0;
+
+	double yaw_thrust_left = yaw_thrust < 0.0 ? 0.0 : yaw_thrust;
+	double yaw_thrust_right = yaw_thrust < 0.0 ? std::fabs(yaw_thrust) : 0.0;
 
 
-	auto clk = *this->get_clock();
+	// Thrust
+	double thrust_left = setpoint_.y + yaw_thrust_left;
+	double thrust_right = setpoint_.y + yaw_thrust_right;
 
-	// // This whole section should not be needed...
-	// const double yaw_thrust_limit = 0.1;
-
-	// if(std::fabs(yaw_thrust_left)>yaw_thrust_limit){
-	// 	RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_left saturated");
-	// } 
-	// if(std::fabs(yaw_thrust_right)>yaw_thrust_limit){
-	// 	RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "yaw_thrust_right saturated");
-	// }
-
-	// yaw_thrust_left = std::clamp(yaw_thrust_left, -yaw_thrust_limit, yaw_thrust_limit);
-	// yaw_thrust_right = std::clamp(yaw_thrust_right, -yaw_thrust_limit, yaw_thrust_limit);
-	// // ... until here.
-
-	// RCLCPP_INFO(this->get_logger(), "yaw_thrust (left, right): %f %f", yaw_thrust_left, yaw_thrust_right);
-
-	// double stabilization_error = -gyro_rad_[1];
-	// double stabilization_thrust = stabilization_pid->computeCommand(stabilization_error, period_);
-
-	// RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 1000, "stabilization_thrust: %f", stabilization_thrust);
+	thrust_left = std::clamp(thrust_left, MIN_THRUST, MAX_THRUST);
+	thrust_right = std::clamp(thrust_right, MIN_THRUST, MAX_THRUST);
 
 
-	double thrust_left = theta_thrust_setpoint_ + yaw_thrust_left;
-	double thrust_right = theta_thrust_setpoint_ + yaw_thrust_right;
-
-	// if(enable_stabilization_){
-	// 	thrust_left += stabilization_thrust;
-	// 	thrust_right += stabilization_thrust;
-	// }
+	RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 100, "(error, left,right): (%f, %f, %f)", error, thrust_left, thrust_right);
 
 
-	// //maybe this is not needed
-	// if(thrust_left < 0.0){
-	// 	thrust_right += std::fabs(thrust_left);
-	// }
-	// if(thrust_right < 0.0){
-	// 	thrust_left += std::fabs(thrust_right);
-	// }
+	// thrust_left = 0.05;
+	// thrust_right = 0.05;
 
-	// RCLCPP_INFO(this->get_logger(), "thrust (left, right): %f %f", thrust_left, thrust_right);
-
-	const double thrust_limit_low = 0.0;
-	const double thrust_limit_high = MAX_THRUST; // MAX 0.3 -> 5A
-
-	if(thrust_left>thrust_limit_high){
-		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left saturated");
-	} 
-	if(thrust_left<thrust_limit_low){
-		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_left below limit");
-	} 
-	if(thrust_right>thrust_limit_high){
-		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_right saturated");
-	}
-	if(thrust_right<thrust_limit_low){
-		RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 1000, "thrust_right below limit");
-	} 
-
-	thrust_left = std::clamp(thrust_left, thrust_limit_low, thrust_limit_high);
-	thrust_right = std::clamp(thrust_right, thrust_limit_low, thrust_limit_high);
-
-	// RCLCPP_INFO(this->get_logger(), "thrust_limited (left, right): %f %f", thrust_left, thrust_right);
-
-
+	// Combine the two
 	ActuatorMotors msg{};
 
 	msg.control = {(float) thrust_left, (float) thrust_right};
