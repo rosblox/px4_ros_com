@@ -65,13 +65,11 @@ public:
 					setpoint_ = *msg;
 				});
 		
-
 		enable_thrust_ = true;
 
 		setpoint_.x = 0.0;
-		setpoint_.y = 0.05;
+		setpoint_.y = 0.0;
 		setpoint_.z = 0.0;
-
 
 		this->declare_parameter<double>("pid.p", 0.001);
 		this->declare_parameter<double>("pid.i", 0.0);
@@ -82,23 +80,9 @@ public:
 
 		ptr = std::shared_ptr<rclcpp::Node>(this);
 		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
-
-		// this->declare_parameter<double>("stabilization_pid.p", 0.05);
-		// this->declare_parameter<double>("stabilization_pid.i", 0.0);
-		// this->declare_parameter<double>("stabilization_pid.d", 0.0);
-		// this->declare_parameter<double>("stabilization_pid.i_clamp_max", 0.0);
-		// this->declare_parameter<double>("stabilization_pid.i_clamp_min", 0.0);
-		// this->declare_parameter<bool>("stabilization_pid.antiwindup", false);
-
-		// stabilization_pid = std::make_shared<control_toolbox::PidROS>(ptr, "stabilization_pid");
-
-
 		pid->initPid();
 
-		// stabilization_pid->initPid();
-
 		publish_setpoint_and_arm();
-
 
 		auto timer_callback = [this]() -> void {
 			// publish_offboard_control_mode();
@@ -125,7 +109,6 @@ private:
 
 	std::shared_ptr<rclcpp::Node> ptr;
 	std::shared_ptr<control_toolbox::PidROS> pid;
-	// std::shared_ptr<control_toolbox::PidROS> stabilization_pid;
 
 	std::array<float, 4> vehicle_orientation_;
 	geometry_msgs::msg::Vector3 setpoint_;
@@ -192,10 +175,6 @@ void OffboardControl::publish_actuator_motors() const {
 
 
 	RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 100, "(error, left,right): (%f, %f, %f)", error, thrust_left, thrust_right);
-
-
-	// thrust_left = 0.05;
-	// thrust_right = 0.05;
 
 	// Combine the two
 	ActuatorMotors msg{};
