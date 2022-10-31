@@ -27,7 +27,7 @@ const int LEFT_BUTTON = 6;
 const int RIGHT_BUTTON = 6;
 
 const double MIN_THRUST = 0.0;
-const double MAX_THRUST = 0.3;
+const double MAX_THRUST = 0.4;
 // MAX 0.3 -> 5A
 
 using namespace std::chrono;
@@ -152,7 +152,6 @@ void OffboardControl::publish_actuator_motors() const {
 	double yaw_measured_deg = quaternion_get_yaw(vehicle_orientation_) * 180.0/PI;
 
 	auto error = setpoint_.x - yaw_measured_deg;
-	// RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 100, "(error): (%f)", error);
 
 	if(error > 180.0){
 		error-=360.0;
@@ -169,6 +168,17 @@ void OffboardControl::publish_actuator_motors() const {
 	// Thrust
 	double thrust_left = setpoint_.y + yaw_thrust_left;
 	double thrust_right = setpoint_.y + yaw_thrust_right;
+
+
+	// Clamping
+	if(thrust_left > MAX_THRUST){
+		thrust_right -= (thrust_left-MAX_THRUST);
+		thrust_left = MAX_THRUST;
+	}
+	else if (thrust_right > MAX_THRUST){
+		thrust_left -= (thrust_right-MAX_THRUST);
+		thrust_right = MAX_THRUST;
+	}
 
 	thrust_left = std::clamp(thrust_left, MIN_THRUST, MAX_THRUST);
 	thrust_right = std::clamp(thrust_right, MIN_THRUST, MAX_THRUST);
