@@ -53,6 +53,15 @@ public:
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/in/VehicleCommand", 10);
 
+
+		enable_thrust_ = true;
+
+		setpoint_.x = 0.0;
+		setpoint_.y = 0.05;
+		setpoint_.z = 0.0;
+
+		// publish_setpoint_and_arm();
+
 		vehicle_odometry_sub_ =
 			this->create_subscription<px4_msgs::msg::VehicleOdometry>("fmu/out/VehicleOdometry", 10,
 				[this](const px4_msgs::msg::VehicleOdometry::UniquePtr msg) {
@@ -65,12 +74,6 @@ public:
 					setpoint_ = *msg;
 				});
 		
-		enable_thrust_ = true;
-
-		setpoint_.x = 0.0;
-		setpoint_.y = 0.0;
-		setpoint_.z = 0.0;
-
 		this->declare_parameter<double>("pid.p", 0.001);
 		this->declare_parameter<double>("pid.i", 0.0);
 		this->declare_parameter<double>("pid.d", 0.0005);
@@ -82,14 +85,29 @@ public:
 		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
 		pid->initPid();
 
-		publish_setpoint_and_arm();
+
+		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
-			// publish_offboard_control_mode();
+
+			if (offboard_setpoint_counter_ == 10) {
+				// Change to Offboard mode after 10 setpoints
+				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
+
+				// Arm the vehicle
+				this->arm();
+			}
+
+			publish_offboard_control_mode();
 			publish_actuator_motors();
+		
+			// stop the counter after reaching 11
+			if (offboard_setpoint_counter_ < 11) {
+				offboard_setpoint_counter_++;
+			}
 		};
 
-		period_ = 20ms;
+		period_ = 10ms;
 		timer_ = this->create_wall_timer(period_, timer_callback);
 	}
 
@@ -114,7 +132,8 @@ private:
 	geometry_msgs::msg::Vector3 setpoint_;
 
 	bool enable_thrust_;
-
+	int offboard_setpoint_counter_;
+	
 	void publish_offboard_control_mode() const;
 	void publish_actuator_motors() const;
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0) const;
@@ -197,18 +216,24 @@ void OffboardControl::publish_actuator_motors() const {
 
 void OffboardControl::publish_setpoint_and_arm() const {
 
-	for (int i = 0; i < 10; i++) {
-		publish_offboard_control_mode();
-    	std::this_thread::sleep_for(30ms);
-		actuator_motors_publisher_->publish(ActuatorMotors());
-    	std::this_thread::sleep_for(30ms);
-	}
-	
 	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
     std::this_thread::sleep_for(50ms);
 
 	arm();
     std::this_thread::sleep_for(50ms);
+
+
+	for (int i = 0; i < 10; i++) {
+		publish_offboard_control_mode();
+    	// std::this_thread::sleep_for(30ms);
+		// ActuatorMotors msg{};
+		// msg.control = {(float) setpoint_.y, (float) setpoint_.y};
+		actuator_motors_publisher_->publish(ActuatorMotors());
+    	// std::this_thread::sleep_for(30ms);
+	}
+	
+
+
 }
 
 
