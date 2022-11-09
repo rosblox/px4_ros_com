@@ -203,7 +203,7 @@ void OffboardControl::publish_actuator_motors() const {
 	thrust_right = std::clamp(thrust_right, MIN_THRUST, MAX_THRUST);
 
 
-	RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 100, "(error, left,right): (%f, %f, %f)", error, thrust_left, thrust_right);
+	RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 10000, "(error, left,right): (%f, %f, %f)", error, thrust_left, thrust_right);
 
 	// Combine the two
 	ActuatorMotors msg{};
