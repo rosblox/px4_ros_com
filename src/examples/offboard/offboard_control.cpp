@@ -90,13 +90,26 @@ public:
 
 		auto timer_callback = [this]() -> void {
 
+			if(actuator_motors_publisher_->get_subscription_count() == 0 ||
+			   vehicle_command_publisher_->get_subscription_count() == 0 ||
+			   offboard_control_mode_publisher_->get_subscription_count() == 0){	
+				auto clk = *this->get_clock();
+				RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 500, "Motors subscriber %ld:", actuator_motors_publisher_->get_subscription_count());
+				RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 500, "VehicleCommand subscriber %ld:", vehicle_command_publisher_->get_subscription_count());
+				RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 500, "ControlMode subscriber %ld:", offboard_control_mode_publisher_->get_subscription_count());
+				return;
+			}
+
+
 			if (offboard_setpoint_counter_ == 10) {
 				// Change to Offboard mode after 10 setpoints
 				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
+
 				// Arm the vehicle
 				this->arm();
 			}
+
 
 			publish_offboard_control_mode();
 			publish_actuator_motors();
