@@ -27,7 +27,7 @@ const int LEFT_BUTTON = 6;
 const int RIGHT_BUTTON = 6;
 
 const double MIN_THRUST = 0.0;
-const double MAX_THRUST = 0.4;
+const double MAX_THRUST = 0.6;
 // MAX 0.3 -> 5A
 
 using namespace std::chrono;
