@@ -73,6 +73,9 @@ public:
 				[this](const geometry_msgs::msg::Vector3::UniquePtr msg) {
 					setpoint_ = *msg;
 				});
+
+
+
 		
 		this->declare_parameter<double>("pid.p", 0.001);
 		this->declare_parameter<double>("pid.i", 0.0);
@@ -170,8 +173,8 @@ double quaternion_get_yaw(std::array<float,4> q){
 void OffboardControl::publish_actuator_motors() const {
 
 	auto clk = *this->get_clock();
-
-	if(!enable_thrust_){
+	
+	if(!setpoint_.z){
 		ActuatorMotors msg{};
 		msg.control = {0.0, 0.0};
 		actuator_motors_publisher_->publish(msg);
