@@ -69,7 +69,7 @@ public:
 				});
 
 		setpoint_sub_ =
-			this->create_subscription<geometry_msgs::msg::Vector3>("setpoint", 10,
+			this->create_subscription<geometry_msgs::msg::Vector3>("pixhawk/setpoint", 10,
 				[this](const geometry_msgs::msg::Vector3::UniquePtr msg) {
 					setpoint_ = *msg;
 				});
