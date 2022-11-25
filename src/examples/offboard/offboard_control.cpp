@@ -85,7 +85,7 @@ public:
 		this->declare_parameter<bool>("pid.antiwindup", true);
 
 		ptr = std::shared_ptr<rclcpp::Node>(this);
-		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pid");
+		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pixhawk");
 		pid->initPid();
 
 
