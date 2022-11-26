@@ -77,12 +77,12 @@ public:
 
 
 		
-		this->declare_parameter<double>("pid.p", 0.001);
-		this->declare_parameter<double>("pid.i", 0.0);
-		this->declare_parameter<double>("pid.d", 0.0005);
-		this->declare_parameter<double>("pid.i_clamp_max", 0.1);
-		this->declare_parameter<double>("pid.i_clamp_min", -0.1);
-		this->declare_parameter<bool>("pid.antiwindup", true);
+		this->declare_parameter<double>("pixhawk.p", 0.001);
+		this->declare_parameter<double>("pixhawk.i", 0.0);
+		this->declare_parameter<double>("pixhawk.d", 0.0005);
+		this->declare_parameter<double>("pixhawk.i_clamp_max", 0.1);
+		this->declare_parameter<double>("pixhawk.i_clamp_min", -0.1);
+		this->declare_parameter<bool>("pixhawk.antiwindup", true);
 
 		ptr = std::shared_ptr<rclcpp::Node>(this);
 		pid = std::make_shared<control_toolbox::PidROS>(ptr, "pixhawk");
